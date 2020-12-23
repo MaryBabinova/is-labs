@@ -1,0 +1,162 @@
+#Программа реализует пропускную способность работника аквапарка. Есть 3 вида горки: детская, обычная и опасная. Проход на детскую горку доступен при любом росте и возрасте.
+#Проход на обычную горку ограничен по возрасту: не разрешается до 7 лет и при росте ниже 150 см. Самые жесткие ограничения накладываются на опасную горку. На нее не допускаются
+#лица до 18 лет и ниже 150 см. Посетитель агент Visitor сообщает его пожелание по поводу типа горки (junior, ordinary или dangerous), свой возраст и рост в сантиметрах.
+#Работкник аквапарка агент WaterParkWorker анализирует полученную информацию и выдает вердикт о возможности или невозможности использования горки. Сообщение поступает
+#агенту посетителю и, в зависимости от исхода, посетитель уходит или остается на горке.
+#Пример работы представлен после кода
+
+import json
+from pade.acl.messages import ACLMessage
+from pade.misc.utility import display_message, start_loop
+from pade.core.agent import Agent
+from pade.acl.aid import AID
+from sys import argv
+import random
+type_slide = ['junior', 'ordinary', 'dangerous']
+class WaterParkWorker(Agent):
+    def __init__(self, aid):
+        super(WaterParkWorker, self).__init__(aid=aid, debug=False)
+    def react(self, message):
+        super(WaterParkWorker, self).react(message)
+        if message.performative == ACLMessage.PROPOSE:
+            content = json.loads(message.content)
+            ageVisitor = int(content['ageVisitor'])
+            heightVisitor = int(content['heightVisitor'])
+            typeSlide = int(content['typeSlide'])
+            message = ACLMessage()
+
+            if ageVisitor <=7:
+                if typeSlide == 0:
+                    message.set_performative(ACLMessage.ACCEPT_PROPOSAL)
+                    message.add_receiver(AID(name="Visitor@localhost:8011"))
+                    display_message(self.aid.localname, "Проходите,будьте аккуратны и прижмите голову к груди")
+                    message.set_content(json.dumps({'VisitorPos': 1}))
+                    self.send(message)
+                else:
+                    message.set_performative(ACLMessage.REJECT_PROPOSAL)
+                    message.add_receiver(AID(name="Visitor@localhost:8011"))
+                    display_message(self.aid.localname, "Прошу прощения, но вы не подходите по возрасту")
+                    message.set_content(json.dumps({'VisitorPos': 0}))
+                    self.send(message)
+            elif ageVisitor > 7 & ageVisitor < 18:
+                if typeSlide == 2:
+                    message.set_performative(ACLMessage.REJECT_PROPOSAL)
+                    message.add_receiver(AID(name="Visitor@localhost:8011"))
+                    display_message(self.aid.localname, "Прошу прощения, но вы не подходите по возрасту")
+                    message.set_content(json.dumps({'VisitorPos': 0}))
+                    self.send(message)
+                elif typeSlide == 1:
+                    if heightVisitor < 150:
+                        message.set_performative(ACLMessage.REJECT_PROPOSAL)
+                        message.add_receiver(AID(name="Visitor@localhost:8011"))
+                        display_message(self.aid.localname, "Прошу прощения, но вы не подходите по росту")
+                        message.set_content(json.dumps({'VisitorPos': 0}))
+                        self.send(message)
+                else:
+                    message.set_performative(ACLMessage.ACCEPT_PROPOSAL)
+                    message.add_receiver(AID(name="Visitor@localhost:8011"))
+                    display_message(self.aid.localname, "Проходите,будьте аккуратны и прижмите голову к груди")
+                    message.set_content(json.dumps({'VisitorPos': 1}))
+                    self.send(message)
+            else:
+                if typeSlide == 2 or typeSlide == 1:
+                    if heightVisitor < 150:
+                        message.set_performative(ACLMessage.REJECT_PROPOSAL)
+                        message.add_receiver(AID(name="Visitor@localhost:8011"))
+                        display_message(self.aid.localname, "Прошу прощения, но вы не подходите по росту")
+                        message.set_content(json.dumps({'VisitorPos': 0}))
+                        self.send(message)
+                else:
+                    message.set_performative(ACLMessage.ACCEPT_PROPOSAL)
+                    message.add_receiver(AID(name="Visitor@localhost:8011"))
+                    display_message(self.aid.localname, "Проходите,будьте аккуратны и прижмите голову к груди")
+                    message.set_content(json.dumps({'VisitorPos': 1}))
+                    self.send(message)
+
+
+class Visitor(Agent):
+    def __init__(self, aid):
+        super(Visitor, self).__init__(aid=aid, debug=False)
+        self.ageVisitor = 1
+
+    def on_start(self):
+        super().on_start()
+        self.call_later(10, self.sendValue)
+
+    def sendValue(self):
+        self.ageVisitor = random.randint(5, 80)
+        self.heightVisitor = random.randint(120, 210)
+        self.random_number = random.randint(0, 2)
+        random_type = type_slide[self.random_number]
+        display_message(self.aid.localname, "Я хочу на {} горку".format(random_type))
+        display_message(self.aid.localname, "Мой возраст: {} ".format(self.ageVisitor))
+        display_message(self.aid.localname, "Мой рост : {} ".format(self.heightVisitor))
+        message = ACLMessage()
+        message.set_performative(ACLMessage.PROPOSE)
+        message.set_content(json.dumps({'ageVisitor': self.ageVisitor, 'heightVisitor': self.heightVisitor, 'typeSlide': self.random_number}))
+        message.add_receiver(AID(name="WaterParkWorker@localhost:8022"))
+
+        self.send(message)
+
+    def react(self, message):
+        super(Visitor, self).react(message)
+        content = json.loads(message.content)
+        VisitorPos = int(content['VisitorPos'])
+        if message.performative == ACLMessage.REJECT_PROPOSAL:
+            if VisitorPos == 0:
+                display_message(self.aid.localname, "Пойду на другую горку")
+            pass
+        elif message.performative == ACLMessage.ACCEPT_PROPOSAL:
+            if VisitorPos == 1:
+                display_message(self.aid.localname, "Спасибо, прохожу")
+
+
+if __name__ == '__main__':
+
+    agents = list()
+
+
+    visitor = Visitor(AID(name="Visitor@localhost:8011"))
+    waterParkWorker = WaterParkWorker(AID(name="WaterParkWorker@localhost:8022"))
+
+    agents.append(visitor)
+    agents.append(waterParkWorker)
+
+    start_loop(agents)
+
+
+
+
+
+
+
+#[Visitor] 21/12/2020 15:42:27.288 --> Я хочу на junior горку
+#[Visitor] 21/12/2020 15:42:27.288 --> Мой возраст : 9
+#[Visitor] 21/12/2020 15:42:27.289 --> Мой рост : 162
+#[WaterParkWorker] 21/12/2020 15:42:27.291 --> Проходите,будьте аккуратны и прижмите голову к груди
+#[Visitor] 21/12/2020 15:42:27.295 --> Спасибо, прохожу
+
+#[Visitor] 21/12/2020 15:53:23.295 --> Я хочу на dangerous горку
+#[Visitor] 21/12/2020 15:53:23.295 --> Мой возраст: 13
+#[Visitor] 21/12/2020 15:53:23.296 --> Мой рост : 210
+#[WaterParkWorker] 21/12/2020 15:53:23.300 --> Прошу прощения, но вы не подходите по возрасту
+#[Visitor] 21/12/2020 15:53:23.305 --> Пойду на другую горку
+
+#[Visitor] 21/12/2020 15:57:03.343 --> Я хочу на junior горку
+#[Visitor] 21/12/2020 15:57:03.343 --> Мой возраст: 58
+#[Visitor] 21/12/2020 15:57:03.343 --> Мой рост : 188
+#[WaterParkWorker] 21/12/2020 15:57:03.346 --> Проходите,будьте аккуратны и прижмите голову к груди
+#[Visitor] 21/12/2020 15:57:03.348 --> Спасибо, прохожу
+
+#[Visitor] 21/12/2020 16:06:56.855 --> Я хочу на junior горку
+#[Visitor] 21/12/2020 16:06:56.855 --> Мой возраст: 52
+#[Visitor] 21/12/2020 16:06:56.857 --> Мой рост : 140
+#[WaterParkWorker] 21/12/2020 16:06:56.862 --> Проходите,будьте аккуратны и прижмите голову к груди
+#[Visitor] 21/12/2020 16:06:56.869 --> Спасибо, прохожу
+
+#[Visitor] 21/12/2020 16:09:22.550 --> Я хочу на ordinary горку
+#[Visitor] 21/12/2020 16:09:22.551 --> Мой возраст: 39
+#[Visitor] 21/12/2020 16:09:22.552 --> Мой рост : 135
+#[WaterParkWorker] 21/12/2020 16:09:22.559 --> Прошу прощения, но вы не подходите по росту
+#[Visitor] 21/12/2020 16:09:22.568 --> Пойду на другую горку
+
